@@ -1,117 +1,124 @@
-import express from 'express'
-import cors from 'cors'
-import http from 'http'
-import { Server } from 'socket.io'
-import dotenv from 'dotenv'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { connectDB } from './config/db.js'
-import authRoutes from './routes/authRoutes.js'
-import interviewRoutes from './routes/interviewRoutes.js'
-import { initializeSocketHandlers } from './socket/socketHandler.js'
+import express from "express";
+import cors from "cors";
+import http from "http";
+import { Server } from "socket.io";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+import { connectDB } from "./config/db.js";
+import authRoutes from "./routes/authRoutes.js";
+import interviewRoutes from "./routes/interviewRoutes.js";
+import { initializeSocketHandlers } from "./socket/socketHandler.js";
 
-dotenv.config({ path: path.join(__dirname, '.env') })
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const app = express()
-const server = http.createServer(app)
+// Load environment variables
+dotenv.config({ path: path.join(__dirname, ".env") });
 
-/* =========================
-   CORS CONFIG (Render Safe)
-========================= */
+const app = express();
+const server = http.createServer(app);
+
+// =======================
+// CORS CONFIGURATION
+// =======================
 
 const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  process.env.FRONTEND_URL,
-].filter(Boolean)
+  "http://localhost:5173",
+  "http://localhost:3000",
+  process.env.FRONTEND_URL, // Vercel URL
+].filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (health checks, Postman, etc.)
-      if (!origin) return callback(null, true)
-
+      if (!origin) return callback(null, true); // Allow Postman / health checks
       if (allowedOrigins.includes(origin)) {
-        return callback(null, true)
+        return callback(null, true);
       }
-
-      // For production stability (avoid invalid header crash)
-      return callback(null, true)
+      return callback(null, true); // Allow all for now (production safe alternative below)
     },
     credentials: true,
   })
-)
+);
 
-app.use(express.json({ limit: '50mb' }))
-app.use(express.urlencoded({ limit: '50mb', extended: true }))
+// =======================
+// BODY PARSING
+// =======================
 
-/* =========================
-   SOCKET.IO CONFIG
-========================= */
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// =======================
+// SOCKET.IO
+// =======================
 
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     credentials: true,
   },
-  transports: ['websocket', 'polling'],
-})
+  transports: ["websocket", "polling"],
+});
 
-/* =========================
-   DATABASE
-========================= */
+initializeSocketHandlers(io);
 
-connectDB()
+// =======================
+// DATABASE CONNECTION
+// =======================
 
-/* =========================
-   LOGGING
-========================= */
+connectDB();
+
+// =======================
+// REQUEST LOGGER
+// =======================
 
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`)
-  next()
-})
+  console.log(
+    `${new Date().toISOString()} ${req.method} ${req.originalUrl}`
+  );
+  next();
+});
 
-/* =========================
-   ROUTES
-========================= */
+// =======================
+// ROUTES
+// =======================
 
-app.use('/api/auth', authRoutes)
-app.use('/api/interviews', interviewRoutes)
+app.use("/api/auth", authRoutes);
+app.use("/api/interviews", interviewRoutes);
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() })
-})
+// Health check route
+app.get("/health", (req, res) => {
+  res.json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+  });
+});
 
-initializeSocketHandlers(io)
-
-/* =========================
-   ERROR HANDLING
-========================= */
+// =======================
+// ERROR HANDLING
+// =======================
 
 app.use((err, req, res, next) => {
-  console.error('Error:', err.message)
+  console.error("Server Error:", err.message);
   res.status(500).json({
-    message: err.message || 'Internal server error',
-  })
-})
+    message: err.message || "Internal Server Error",
+  });
+});
 
+// 404 fallback
 app.use((req, res) => {
-  res.status(404).json({ message: 'Route not found' })
-})
+  res.status(404).json({ message: "Route not found" });
+});
 
-/* =========================
-   SERVER START
-========================= */
+// =======================
+// START SERVER
+// =======================
 
-const PORT = process.env.PORT || 5000
+const PORT = process.env.PORT || 5000;
+
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📝 MongoDB Connected`)
-  console.log(`🔗 Allowed Origins:`, allowedOrigins)
-})
-
-export default app
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🔗 Allowed Origins:`, allowedOrigins);
+});
