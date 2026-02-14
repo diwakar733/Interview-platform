@@ -5,6 +5,9 @@ import Interview from '../models/Interview.js'
 import authMiddleware from '../middleware/authMiddleware.js'
 import { validateCodeUpdate, validateRating } from '../middleware/validationMiddleware.js'
 import memoryStore from '../utils/memoryStore.js'
+import axios from 'axios'
+import Chat from '../models/Chat.js'
+import { runCodeOnJudge0, analyzeInterview } from '../utils/ai.js'
 import { getMongoStatus } from '../config/db.js'
 
 const router = express.Router()
@@ -128,6 +131,51 @@ router.put('/:roomId/code', authMiddleware, validateCodeUpdate, async (req, res)
   } catch (err) {
     console.error('Update code error:', err.message)
     res.status(500).json({ message: 'Failed to update code' })
+  }
+})
+
+// Run code (Judge0)
+router.post('/:roomId/run', authMiddleware, async (req, res) => {
+  try {
+    const { code, language, stdin } = req.body
+    if (!code) return res.status(400).json({ message: 'Code is required' })
+
+    const result = await runCodeOnJudge0(code, language)
+    res.json(result)
+  } catch (err) {
+    console.error('Run code error:', err.message)
+    res.status(500).json({ message: 'Failed to run code', error: err.message })
+  }
+})
+
+// AI analysis endpoint
+router.post('/analyze', authMiddleware, async (req, res) => {
+  try {
+    const { transcript, code, language } = req.body
+    if (!transcript && !code) return res.status(400).json({ message: 'Transcript or code required' })
+
+    const analysis = await analyzeInterview({ transcript, code, language })
+    res.json({ analysis })
+  } catch (err) {
+    console.error('Analyze error:', err.message)
+    res.status(500).json({ message: 'Failed to analyze interview', error: err.message })
+  }
+})
+
+// Get chat history for room
+router.get('/:roomId/chats', authMiddleware, async (req, res) => {
+  try {
+    const { roomId } = req.params
+    let chats
+    if (isMongoConnected()) {
+      chats = await Chat.find({ roomId }).sort({ createdAt: 1 })
+    } else {
+      chats = []
+    }
+    res.json(chats)
+  } catch (err) {
+    console.error('Get chats error:', err.message)
+    res.status(500).json({ message: 'Failed to fetch chats' })
   }
 })
 

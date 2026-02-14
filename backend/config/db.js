@@ -9,17 +9,21 @@ const connectDB = async () => {
   while (retries < maxRetries) {
     try {
       const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/interview-platform'
-      await mongoose.connect(mongoURI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+      
+      // Build connection options
+      const options = {
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 10000,
-        retryWrites: true,
-        w: 'majority',
-        tls: true,
-        tlsInsecure: true, // Allow self-signed certificates
-        authSource: 'admin',
-      })
+      }
+      
+      // Only add TLS options for MongoDB Atlas (mongodb+srv://)
+      if (mongoURI.startsWith('mongodb+srv://')) {
+        options.tls = true
+        options.tlsInsecure = true // Allow self-signed certificates
+        options.authSource = 'admin'
+      }
+      
+      await mongoose.connect(mongoURI, options)
       isMongoConnected = true
       console.log('✅ MongoDB connected successfully')
       return

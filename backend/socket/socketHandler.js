@@ -1,4 +1,5 @@
 import Interview from '../models/Interview.js'
+import Chat from '../models/Chat.js'
 
 export const initializeSocketHandlers = (io) => {
   io.on('connection', (socket) => {
@@ -38,7 +39,44 @@ export const initializeSocketHandlers = (io) => {
 
     socket.on('code-change', (data) => {
       const { roomId, code } = data
-      socket.to(roomId).emit('receive-code', { code })
+      // Broadcast code change to others in room
+      socket.to(roomId).emit('receive-code', { code, from: socket.data?.userId })
+    })
+
+    // Cursor position updates
+    socket.on('cursor-update', (data) => {
+      const { roomId, cursor } = data
+      socket.to(roomId).emit('cursor-update', { socketId: socket.id, userId: socket.data?.userId, cursor })
+    })
+
+    // Typing indicator
+    socket.on('typing', (data) => {
+      const { roomId, typing } = data
+      socket.to(roomId).emit('typing', { socketId: socket.id, userId: socket.data?.userId, typing })
+    })
+
+    // Chat messages
+    socket.on('chat-message', async (data) => {
+      try {
+        const { roomId, message } = data
+        const chatObj = {
+          roomId,
+          sender: socket.data?.userId,
+          senderName: socket.data?.userName,
+          message,
+        }
+
+        // Persist if possible
+        try {
+          await Chat.create(chatObj)
+        } catch (e) {
+          // ignore persistence errors for in-memory mode
+        }
+
+        io.to(roomId).emit('chat-message', { ...chatObj, createdAt: new Date() })
+      } catch (err) {
+        console.error('Chat message error:', err)
+      }
     })
 
     socket.on('language-change', (data) => {
